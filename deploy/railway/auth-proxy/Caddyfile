@@ -1,0 +1,29 @@
+# Password-protected front door for OpenSEO on Railway.
+# OpenSEO's Docker mode runs with AUTH_MODE=local_noauth (no app login), so the
+# app service has no public domain and this proxy is the only way in.
+{
+	admin off
+	auto_https off
+	persist_config off
+}
+
+:{$PORT:8080} {
+	# Unauthenticated liveness probe for Railway's healthcheck.
+	handle /healthz {
+		respond "ok" 200
+	}
+
+	handle {
+		basic_auth {
+			{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
+		}
+		reverse_proxy {$UPSTREAM} {
+			# Railway's edge terminates TLS; tell the app the public scheme.
+			header_up X-Forwarded-Proto https
+			# The app doesn't use the proxy login; don't pass it along.
+			header_up -Authorization
+			# Stream SSE / chat responses without buffering.
+			flush_interval -1
+		}
+	}
+}
